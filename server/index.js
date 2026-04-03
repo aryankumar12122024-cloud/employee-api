@@ -19,6 +19,25 @@ a{display:inline-block;margin-top:16px}
 </head>
 <body>
 <h1>Employee add</h1>
+<p>Default login: <b>admin</b> / <b>admin123</b></p>
+<form id="loginForm">
+<label>Username<input name="username" required value="admin"></label>
+<label>Password<input name="password" type="password" required value="admin123"></label>
+<button type="submit">Login</button>
+</form>
+<hr>
+<h2>OTP login</h2>
+<form id="otpRequestForm">
+<label>Mobile or Email<input name="target" required placeholder="98xxxxxxxx or you@gmail.com"></label>
+<label>Channel<input name="channel" required value="sms" placeholder="sms or email"></label>
+<button type="submit">Request OTP</button>
+</form>
+<form id="otpVerifyForm">
+<label>Same target<input name="target" required placeholder="same as above"></label>
+<label>OTP<input name="otp" required placeholder="6 digit otp"></label>
+<button type="submit">Verify OTP Login</button>
+</form>
+<p style="font-size:12px">Note: demo mode me OTP screen par show hoga.</p>
 <form id="f">
 <label>Name<input name="name" required autocomplete="name"></label>
 <label>Role<input name="role" required></label>
@@ -26,11 +45,87 @@ a{display:inline-block;margin-top:16px}
 <button type="submit">Save</button>
 </form>
 <p id="msg"></p>
-<p><a href="/api/employees">View list (JSON)</a></p>
+<button id="listBtn" type="button">View list (JSON)</button>
+<pre id="list"></pre>
 <script>
+let authToken = '';
+
+document.getElementById('loginForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const msg = document.getElementById('msg');
+  msg.textContent = 'Logging in...';
+  const body = {
+    username: loginForm.username.value.trim(),
+    password: loginForm.password.value
+  };
+  try {
+    const r = await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || 'Login failed');
+    authToken = data.token;
+    msg.textContent = 'Login success';
+  } catch (err) {
+    msg.textContent = err.message;
+  }
+});
+
+document.getElementById('otpRequestForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const msg = document.getElementById('msg');
+  msg.textContent = 'Requesting OTP...';
+  const body = {
+    target: otpRequestForm.target.value.trim(),
+    channel: otpRequestForm.channel.value.trim().toLowerCase()
+  };
+  try {
+    const r = await fetch('/api/auth/request-otp', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || 'OTP request failed');
+    msg.textContent = 'OTP: ' + data.otp + ' (demo mode)';
+    otpVerifyForm.target.value = body.target;
+  } catch (err) {
+    msg.textContent = err.message;
+  }
+});
+
+document.getElementById('otpVerifyForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const msg = document.getElementById('msg');
+  msg.textContent = 'Verifying OTP...';
+  const body = {
+    target: otpVerifyForm.target.value.trim(),
+    otp: otpVerifyForm.otp.value.trim()
+  };
+  try {
+    const r = await fetch('/api/auth/verify-otp', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || 'OTP verify failed');
+    authToken = data.token;
+    msg.textContent = 'OTP login success';
+  } catch (err) {
+    msg.textContent = err.message;
+  }
+});
+
 document.getElementById('f').addEventListener('submit', async (e) => {
   e.preventDefault();
   const msg = document.getElementById('msg');
+  if (!authToken) {
+    msg.textContent = 'Please login first';
+    return;
+  }
   msg.textContent = 'Saving...';
   const body = {
     name: f.name.value.trim(),
@@ -40,7 +135,10 @@ document.getElementById('f').addEventListener('submit', async (e) => {
   try {
     const r = await fetch('/api/employees', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + authToken
+      },
       body: JSON.stringify(body)
     });
     const data = await r.json();
@@ -49,6 +147,25 @@ document.getElementById('f').addEventListener('submit', async (e) => {
     f.reset();
   } catch (err) {
     msg.textContent = err.message;
+  }
+});
+
+document.getElementById('listBtn').addEventListener('click', async () => {
+  const list = document.getElementById('list');
+  if (!authToken) {
+    list.textContent = 'Please login first';
+    return;
+  }
+  list.textContent = 'Loading...';
+  try {
+    const r = await fetch('/api/employees', {
+      headers: { 'Authorization': 'Bearer ' + authToken }
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || 'Error');
+    list.textContent = JSON.stringify(data, null, 2);
+  } catch (err) {
+    list.textContent = err.message;
   }
 });
 </script>
@@ -78,7 +195,7 @@ const server = http.createServer(async (req, res) => {
     res.writeHead(204, {
       'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
     });
     res.end();
     return;
