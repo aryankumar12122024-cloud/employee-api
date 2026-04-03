@@ -20,10 +20,18 @@ a{display:inline-block;margin-top:16px}
 <body>
 <h1>Employee add</h1>
 <p>Default login: <b>admin</b> / <b>admin123</b></p>
+<h2>Sign up</h2>
+<form id="signupForm">
+<label>Name<input name="name" placeholder="Your name"></label>
+<label>Email<input name="email" type="email" placeholder="you@gmail.com"></label>
+<label>Mobile<input name="mobile" placeholder="98xxxxxxxx"></label>
+<label>Password<input name="password" type="password" required></label>
+<button type="submit">Sign up</button>
+</form>
 <form id="loginForm">
-<label>Username<input name="username" required value="admin"></label>
+<label>Username (email/mobile/admin)<input name="username" required value="admin"></label>
 <label>Password<input name="password" type="password" required value="admin123"></label>
-<button type="submit">Login</button>
+<button type="submit">Sign in</button>
 </form>
 <hr>
 <h2>OTP login</h2>
@@ -49,6 +57,33 @@ a{display:inline-block;margin-top:16px}
 <pre id="list"></pre>
 <script>
 let authToken = '';
+
+document.getElementById('signupForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const msg = document.getElementById('msg');
+  msg.textContent = 'Creating account...';
+  const body = {
+    name: signupForm.name.value.trim(),
+    email: signupForm.email.value.trim(),
+    mobile: signupForm.mobile.value.trim(),
+    password: signupForm.password.value
+  };
+  try {
+    const r = await fetch('/api/auth/signup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || 'Signup failed');
+    msg.textContent = 'Signup success. Ab Sign in karo.';
+    loginForm.username.value = body.email || body.mobile || '';
+    loginForm.password.value = '';
+    signupForm.password.value = '';
+  } catch (err) {
+    msg.textContent = err.message;
+  }
+});
 
 document.getElementById('loginForm').addEventListener('submit', async (e) => {
   e.preventDefault();

@@ -59,6 +59,10 @@ function createAuthToken() {
   return token;
 }
 
+function hashPassword(password) {
+  return crypto.createHash('sha256').update(String(password || '')).digest('hex');
+}
+
 function normalizeOtpTarget(target) {
   return String(target || '').trim().toLowerCase();
 }
@@ -81,14 +85,49 @@ function getOtpRecord(target) {
 
 async function handleApiRequest(req, res) {
   try {
+    if (req.url === '/api/auth/signup' && req.method === 'POST') {
+      const payload = await readJsonBody(req);
+      const name = String(payload.name || '').trim();
+      const email = String(payload.email || '').trim().toLowerCase();
+      const mobile = String(payload.mobile || '').trim();
+      const password = String(payload.password || '');
+
+      if ((!email && !mobile) || !password) {
+        sendJson(res, 400, { error: 'email/mobile and password are required' });
+        return;
+      }
+
+      const passwordHash = hashPassword(password);
+      const user = await db.addUser({ name, email, mobile, passwordHash });
+      sendJson(res, 201, { message: 'Signup successful', user });
+      return;
+    }
+
     if (req.url === '/api/auth/login' && req.method === 'POST') {
       const payload = await readJsonBody(req);
-      if (payload.username !== AUTH_USER || payload.password !== AUTH_PASS) {
+      const username = String(payload.username || '').trim();
+      const password = String(payload.password || '');
+
+      // Backward-compatible admin login
+      if (username === AUTH_USER && password === AUTH_PASS) {
+        const token = createAuthToken();
+        sendJson(res, 200, { token, expiresInHours: 24, role: 'admin' });
+        return;
+      }
+
+      const user = await db.getUserByIdentifier(username);
+      if (!user || user.passwordHash !== hashPassword(password)) {
         sendJson(res, 401, { error: 'Invalid username or password' });
         return;
       }
+
       const token = createAuthToken();
-      sendJson(res, 200, { token, expiresInHours: 24 });
+      sendJson(res, 200, {
+        token,
+        expiresInHours: 24,
+        role: 'user',
+        user: { id: user.id, name: user.name, email: user.email, mobile: user.mobile },
+      });
       return;
     }
 
