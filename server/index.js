@@ -1,7 +1,134 @@
-const http = require('http');
+bhai tu in dono ko const http = require('http');
 const { handleApiRequest } = require('../api');
 const PORT = process.env.PORT || 3000;
 
+const shoppingPageHtml = `<!DOCTYPE html>
+<html lang="hi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ARUU2040x Shopping - Employee App</title>
+<style>
+body{font-family:system-ui,sans-serif;margin:0;padding:16px;background:#f5f5f5;max-width:480px;margin:auto}
+header{background:#4f46e5;color:white;padding:16px;text-align:center}
+h1{margin:0;font-size:1.4em}
+nav{padding:8px;background:white;margin-bottom:16px;border-radius:8px}
+nav button{background:#10b981;color:white;border:none;padding:8px 16px;border-radius:4px;margin:0 4px;cursor:pointer;font-size:16px}
+.product-grid{display:grid;gap:16px}
+.product{background:white;padding:16px;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,0.1)}
+.product img{width:100%;height:160px;object-fit:cover;border-radius:8px}
+.price{font-size:1.2em;font-weight:bold;color:#059669}
+.add-cart{background:#ef4444;color:white;border:none;padding:12px;width:100%;border-radius:8px;font-size:16px;cursor:pointer}
+#cart{background:white;padding:20px;border-radius:12px;margin-top:16px}
+#ai-chat, #msg{padding:16px;background:#f8fafc;border-radius:8px;margin-top:16px}
+input,select{width:100%;padding:12px;margin:8px 0;box-sizing:border-box;border:1px solid #d1d5db;border-radius:6px;font-size:16px}
+@media (max-width:480px){body{padding:8px}}
+</style>
+</head>
+<body>
+<header>
+<h1>🛒 ARUU2040x Shopping</h1>
+<p>Electronics | Fashion | Home | AI Help</p>
+</header>
+<nav>
+<button onclick="loadProducts()">Products</button>
+<button onclick="viewCart()">Cart (<span id="cartCount">0</span>)</button>
+<button onclick="openEmployees()">👥 Employees</button>
+<button onclick="openLogin()">Login</button>
+</nav>
+<div id="content">
+<div class="product-grid" id="products"></div>
+</div>
+<div id="cart" style="display:none">
+<h2>🛒 Cart</h2>
+<div id="cartItems"></div>
+<button onclick="checkout()" style="background:#3b82f6">Checkout Rs. <span id="total">0</span></button>
+</div>
+<div id="ai-chat">
+<h3>🤖 AI Helper</h3>
+<input id="aiInput" placeholder="Ask about products...">
+<button onclick="aiRespond()">Send</button>
+<p id="aiMsg">Hi! What electronics/fashion/home items you like?</p>
+</div>
+<p id="msg"></p>
+<script>
+let cart = JSON.parse(localStorage.getItem('cart') || '[]');
+let authToken = localStorage.getItem('authToken') || '';
+
+function updateCartCount() {
+  document.getElementById('cartCount').textContent = cart.length;
+}
+
+
+  fetch('/api/products')
+    .then(r => r.json())
+    .then(products => {
+
+          <img src="${p.image || 'https://via.placeholder.com/300x160?text='+p.name+'"} alt="${p.name}">
+          <h3>${p.name}</h3>
+          <p>${p.desc}</p>
+          <div class="price">Rs. ${p.price}</div>
+          <button class="add-cart" onclick="addToCart(${p.id})">Add to Cart</button>
+        </div>
+      `).join('');
+    }).catch(err => document.getElementById('msg').textContent = err.message);
+  document.getElementById('cart').style.display = 'none';
+}
+
+function addToCart(id) {
+  cart.push({id, qty:1});
+  localStorage.setItem('cart', JSON.stringify(cart));
+  updateCartCount();
+  document.getElementById('msg').textContent = 'Added to cart!';
+}
+
+function viewCart() {
+  const items = {};
+  cart.forEach(item => items[item.id] = (items[item.id]||0) + 1);
+  fetch('/api/products')
+    .then(r => r.json())
+    .then(products => {
+      const cartItems = Object.entries(items).map(([idStr, qty]) => {
+        const p = products.find(p => p.id == idStr);
+        return p ? `<div>${p.name} x${qty} = Rs.${p.price * qty}</div>` : '';
+      }).join('');
+      document.getElementById('cartItems').innerHTML = cartItems;
+      document.getElementById('total').textContent = Object.entries(items).reduce((sum, [idStr, qty]) => {
+        const p = products.find(p => p.id == idStr);
+        return sum + (p ? p.price * qty : 0);
+      }, 0);
+      document.getElementById('cart').style.display = 'block';
+      document.getElementById('products').innerHTML = '';
+    });
+}
+
+function checkout() {
+  document.getElementById('msg').textContent = 'Order placed! Total saved to local. (Demo)';
+  cart = [];
+  localStorage.setItem('cart', '[]');
+  updateCartCount();
+}
+
+function aiRespond() {
+  const input = document.getElementById('aiInput').value;
+  document.getElementById('aiMsg').textContent = `AI: Electronics me iPhone best hai. Fashion me sneakers. Search karo! (Mock)`;
+  document.getElementById('aiInput').value = '';
+}
+
+function openEmployees() {
+  window.location.href = '/form';
+}
+
+function openLogin() {
+  // Login form toggle or /form#login
+  document.getElementById('msg').textContent = 'Login at /form (admin/admin123)';
+}
+
+loadProducts();
+updateCartCount();
+</script>
+</body>
+</html>`;
 const formPageHtml = `<!DOCTYPE html>
 <html lang="hi">
 <head>
@@ -239,10 +366,10 @@ document.getElementById('listBtn').addEventListener('click', async () => {
 const server = http.createServer(async (req, res) => {
   if (req.url === '/' && req.method === 'GET') {
     res.writeHead(200, {
-      'Content-Type': 'text/plain',
+      'Content-Type': 'text/html; charset=utf-8',
       'Access-Control-Allow-Origin': '*',
     });
-    res.end('Server is running. Open /form to add employees (example: your-site.onrender.com/form)');
+    res.end(shoppingPageHtml);
     return;
   }
 

@@ -1,4 +1,4 @@
-const fs = require('fs');
+aqr generatekar  const fs = require('fs');
 const path = require('path');
 
 const dbPath = path.join(__dirname, 'employee-data.json');
@@ -74,6 +74,7 @@ function addUser({ name, email, mobile, passwordHash }) {
   return Promise.resolve({ id: user.id, name: user.name, email: user.email, mobile: user.mobile });
 }
 
+
 function getUserByIdentifier(identifier) {
   const value = String(identifier || '').trim().toLowerCase();
   if (!value) return Promise.resolve(null);
@@ -84,8 +85,7 @@ function getUserByIdentifier(identifier) {
   return Promise.resolve(user || null);
 }
 
-module.exports = {
-  getEmployees,
+
   addEmployee,
   addUser,
   getUserByIdentifier,

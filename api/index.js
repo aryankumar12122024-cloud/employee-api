@@ -1,3 +1,4 @@
+
 const crypto = require('crypto');
 const https = require('https');
 const db = require('../database');
@@ -291,6 +292,8 @@ async function handleApiRequest(req, res) {
       sendJson(res, 201, employee);
       return;
     }
+      const products = [
+        {id: 1, name: 'iPhone 15', desc: 'Latest smartphone', price: 79999, image: 'https://via.placeholder.com/300x160/4f46e5/ffffff?text=iPhone+15'},
 
     sendJson(res, 404, { error: 'Route not found' });
   } catch (error) {
@@ -300,3 +303,8 @@ async function handleApiRequest(req, res) {
 
 module.exports = { handleApiRequest };
 
+        const products = await db.getProducts();
+        sendJson(res, 200, products);
+        return;
+      }
+      sendJson(res, 404, { error: 'Route not found' });
