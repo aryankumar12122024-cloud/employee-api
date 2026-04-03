@@ -1,9 +1,11 @@
 const crypto = require('crypto');
+const https = require('https');
 const db = require('../database');
 const AUTH_USER = process.env.AUTH_USER || 'admin';
 const AUTH_PASS = process.env.AUTH_PASS || 'admin123';
 const tokenStore = new Map();
 const otpStore = new Map();
+const pendingSignupStore = new Map();
 
 function sendJson(res, statusCode, payload) {
   res.writeHead(statusCode, {
@@ -83,9 +85,48 @@ function getOtpRecord(target) {
   return { key, ...record };
 }
 
+function postJson(url, headers, body) {
+  return new Promise((resolve, reject) => {
+    const req = https.request(
+      url,
+      { method: 'POST', headers: { 'Content-Type': 'application/json', ...headers } },
+      (res) => {
+        let data = '';
+        res.on('data', (chunk) => {
+          data += chunk.toString();
+        });
+        res.on('end', () => {
+          resolve({ statusCode: res.statusCode || 500, body: data });
+        });
+      }
+    );
+    req.on('error', reject);
+    req.write(JSON.stringify(body));
+    req.end();
+  });
+}
+
+async function sendEmailOtpIfConfigured(target, otp) {
+  const apiKey = process.env.RESEND_API_KEY || '';
+  const fromEmail = process.env.RESEND_FROM_EMAIL || '';
+  if (!apiKey || !fromEmail) return false;
+
+  const response = await postJson(
+    'https://api.resend.com/emails',
+    { Authorization: `Bearer ${apiKey}` },
+    {
+      from: fromEmail,
+      to: [target],
+      subject: 'Your OTP Code',
+      html: `<p>Your OTP is: <b>${otp}</b></p><p>Valid for 5 minutes.</p>`,
+    }
+  );
+  return response.statusCode >= 200 && response.statusCode < 300;
+}
+
 async function handleApiRequest(req, res) {
   try {
-    if (req.url === '/api/auth/signup' && req.method === 'POST') {
+    if (req.url === '/api/auth/signup/request-otp' && req.method === 'POST') {
       const payload = await readJsonBody(req);
       const name = String(payload.name || '').trim();
       const email = String(payload.email || '').trim().toLowerCase();
@@ -97,8 +138,58 @@ async function handleApiRequest(req, res) {
         return;
       }
 
-      const passwordHash = hashPassword(password);
-      const user = await db.addUser({ name, email, mobile, passwordHash });
+      const target = normalizeOtpTarget(email || mobile);
+      const channel = email ? 'email' : 'sms';
+      const otp = createOtpCode();
+      const ttlMs = 5 * 60 * 1000;
+
+      pendingSignupStore.set(target, {
+        name,
+        email,
+        mobile,
+        passwordHash: hashPassword(password),
+        otp,
+        expiresAt: Date.now() + ttlMs,
+      });
+
+      let delivered = false;
+      if (channel === 'email') {
+        delivered = await sendEmailOtpIfConfigured(target, otp);
+      }
+
+      // Demo fallback: agar provider config nahi hai to OTP response me return karte hain.
+      sendJson(res, 200, {
+        message: delivered ? 'OTP sent' : 'OTP generated (demo mode)',
+        target,
+        channel,
+        otp: delivered ? undefined : otp,
+        expiresInMinutes: 5,
+      });
+      return;
+    }
+
+    if (req.url === '/api/auth/signup/verify' && req.method === 'POST') {
+      const payload = await readJsonBody(req);
+      const target = normalizeOtpTarget(payload.target);
+      const providedOtp = String(payload.otp || '').trim();
+      const pending = pendingSignupStore.get(target);
+      if (!pending || Date.now() > pending.expiresAt) {
+        pendingSignupStore.delete(target);
+        sendJson(res, 400, { error: 'OTP expired or signup request not found' });
+        return;
+      }
+      if (pending.otp !== providedOtp) {
+        sendJson(res, 401, { error: 'Invalid OTP' });
+        return;
+      }
+
+      pendingSignupStore.delete(target);
+      const user = await db.addUser({
+        name: pending.name,
+        email: pending.email,
+        mobile: pending.mobile,
+        passwordHash: pending.passwordHash,
+      });
       sendJson(res, 201, { message: 'Signup successful', user });
       return;
     }

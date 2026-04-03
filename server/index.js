@@ -26,7 +26,12 @@ a{display:inline-block;margin-top:16px}
 <label>Email<input name="email" type="email" placeholder="you@gmail.com"></label>
 <label>Mobile<input name="mobile" placeholder="98xxxxxxxx"></label>
 <label>Password<input name="password" type="password" required></label>
-<button type="submit">Sign up</button>
+<button type="submit">Send Signup OTP</button>
+</form>
+<form id="signupVerifyForm">
+<label>Email/Mobile<input name="target" required placeholder="same email/mobile"></label>
+<label>Signup OTP<input name="otp" required placeholder="6 digit otp"></label>
+<button type="submit">Verify Signup OTP</button>
 </form>
 <form id="loginForm">
 <label>Username (email/mobile/admin)<input name="username" required value="admin"></label>
@@ -61,7 +66,7 @@ let authToken = '';
 document.getElementById('signupForm').addEventListener('submit', async (e) => {
   e.preventDefault();
   const msg = document.getElementById('msg');
-  msg.textContent = 'Creating account...';
+  msg.textContent = 'Sending signup OTP...';
   const body = {
     name: signupForm.name.value.trim(),
     email: signupForm.email.value.trim(),
@@ -69,17 +74,41 @@ document.getElementById('signupForm').addEventListener('submit', async (e) => {
     password: signupForm.password.value
   };
   try {
-    const r = await fetch('/api/auth/signup', {
+    const r = await fetch('/api/auth/signup/request-otp', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body)
     });
     const data = await r.json();
-    if (!r.ok) throw new Error(data.error || 'Signup failed');
+    if (!r.ok) throw new Error(data.error || 'Signup OTP failed');
+    signupVerifyForm.target.value = data.target || body.email || body.mobile;
+    msg.textContent = data.otp ? ('Signup OTP: ' + data.otp + ' (demo mode)') : 'Signup OTP sent';
+  } catch (err) {
+    msg.textContent = err.message;
+  }
+});
+
+document.getElementById('signupVerifyForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const msg = document.getElementById('msg');
+  msg.textContent = 'Verifying signup OTP...';
+  const body = {
+    target: signupVerifyForm.target.value.trim(),
+    otp: signupVerifyForm.otp.value.trim()
+  };
+  try {
+    const r = await fetch('/api/auth/signup/verify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    const data = await r.json();
+    if (!r.ok) throw new Error(data.error || 'Signup verify failed');
     msg.textContent = 'Signup success. Ab Sign in karo.';
-    loginForm.username.value = body.email || body.mobile || '';
+    loginForm.username.value = data.user.email || data.user.mobile || '';
     loginForm.password.value = '';
     signupForm.password.value = '';
+    signupVerifyForm.otp.value = '';
   } catch (err) {
     msg.textContent = err.message;
   }
